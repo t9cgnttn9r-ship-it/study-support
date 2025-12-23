@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逆転合格・管理システム</title>
+    <style>
+        :root { --main: #2c3e50; --done: #2ecc71; --help: #e74c3c; --bg: #f8f9fa; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--main); }
+        .card { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; font-size: 1.2rem; margin-bottom: 5px; }
+        .timer { text-align: center; font-size: 2.5rem; color: var(--help); font-weight: bold; margin-bottom: 20px; }
+        
+        .task-item { 
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 0; border-bottom: 1px solid #eee;
+        }
+        .task-title { flex: 1; font-weight: bold; padding-right: 10px; }
+        
+        select { 
+            padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.9rem;
+            cursor: pointer; outline: none; transition: 0.3s;
+        }
+        .sel-done { background: var(--done); color: white; border-color: var(--done); }
+        .sel-help { background: var(--help); color: white; border-color: var(--help); }
+
+        .footer { margin-top: 25px; padding: 15px; background: #eee; border-radius: 8px; font-size: 0.85rem; }
+        .gauge-bar { height: 10px; background: #ddd; border-radius: 5px; margin-top: 8px; overflow: hidden; }
+        .gauge-fill { height: 100%; background: var(--main); transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>入試本番まで あと</h1>
+    <div class="timer" id="days">--</div>
+    
+    <div id="task-container"></div>
+
+    <div class="footer">
+        <span id="sister-label">相手</span> の達成率
+        <div class="gauge-bar"><div class="gauge-fill" id="sister-progress" style="width: 0%"></div></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBs70ZvUR46lwImEnT-9ToXM8xsKnzv_Zk",
+        authDomain: "study-tracker-2bcc8.firebaseapp.com",
+        projectId: "study-tracker-2bcc8",
+        storageBucket: "study-tracker-2bcc8.firebasestorage.app",
+        messagingSenderId: "1086600462772",
+        appId: "1:1086600462772:web:aae073138da8d309ebb2e1",
+        measurementId: "G-NRTS676YQE"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ★ 自身のID設定（凛ちゃん：rin / 杏ちゃん：ann）
+    const myID = "ann"; 
+    const sisterID = "rin";
+
+    const target = new Date("2026-02-15");
+    document.getElementById("days").innerText = Math.ceil((target - new Date()) / 86400000);
+
+    onSnapshot(doc(db, "students", myID), (snap) => {
+        const data = snap.data();
+        if(!data) return;
+        const tasks = data.tasks || [];
+        const container = document.getElementById("task-container");
+        container.innerHTML = "";
+
+        tasks.forEach((t, i) => {
+            const div = document.createElement("div");
+            div.className = "task-item";
+            const currentClass = t.status === "done" ? "sel-done" : (t.status === "help" ? "sel-help" : "");
+            
+            div.innerHTML = `
+                <span class="task-title">${i+1}. ${t.title || '未設定'}</span>
+                <select class="${currentClass}" onchange="changeStatus(${i}, this.value)">
+                    <option value="none" ${t.status === 'none' ? 'selected' : ''}>未着手</option>
+                    <option value="done" ${t.status === 'done' ? 'selected' : ''}>終わった！</option>
+                    <option value="help" ${t.status === 'help' ? 'selected' : ''}>わからん！</option>
+                </select>
+            `;
+            container.appendChild(div);
+        });
+    });
+
+    window.changeStatus = async (index, val) => {
+        const ref = doc(db, "students", myID);
+        const snap = await getDoc(ref);
+        const tasks = snap.data().tasks;
+        tasks[index].status = val;
+        
+        const doneCount = tasks.filter(t => t.status === "done").length;
+        // 達成率を計算して保存
+        const percent = Math.round((doneCount / tasks.length) * 100);
+        await updateDoc(ref, { tasks: tasks, progressPercent: percent });
+    };
+
+    onSnapshot(doc(db, "students", sisterID), (snap) => {
+        const d = snap.data();
+        if(!d) return;
+        document.getElementById("sister-progress").style.width = (d.progressPercent || 0) + "%";
+        document.getElementById("sister-label").innerText = d.name || "相手";
+    });
+</script>
+</body>
+</html>
